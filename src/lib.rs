@@ -2,6 +2,9 @@ use crate::render::Render;
 
 mod render;
 
+#[cfg(feature = "md")]
+pub mod md;
+
 /// Rendering configuration for plain-text document output.
 ///
 /// This configuration defines the physical page layout and

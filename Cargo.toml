@@ -1,7 +1,7 @@
 [package]
 name = "monotext"
 description = "Monotext is a tool for creating well-formatted, professional plain-text documents with cover pages, headers, footers and automatic page layout for papers, reports and structured content"
-version = "0.0.1"
+version = "0.0.2"
 edition = "2024"
 license = "GPL-3.0"
 repository = "https://codeberg.org/siebert/monotext-rs"

@@ -1,9 +1,20 @@
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
+
 use crate::render::Render;
 
 mod render;
 
 #[cfg(feature = "md")]
 pub mod md;
+
+#[cfg(feature = "pdf")]
+pub mod pdf;
+
+#[cfg(feature = "serde")]
+mod serde_intern;
 
 /// Rendering configuration for plain-text document output.
 ///
@@ -16,12 +27,6 @@ pub struct Config {
 
     /// Maximum number of characters per line.
     pub page_width: usize,
-
-    /// Number of pages rendered using Roman numerals (i, ii, iii, ...).
-    ///
-    /// This is typically used for front matter such as title pages,
-    /// abstracts, and tables of contents.
-    pub roman_pages: usize,
 }
 
 /// A fully structured document ready for rendering.
@@ -30,6 +35,7 @@ pub struct Config {
 /// specification or technical document. It is independent of any output
 /// format and contains no layout information.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Document {
     /// Main document title.
     pub title: String,
@@ -38,23 +44,37 @@ pub struct Document {
     pub subtitle: Option<String>,
 
     /// Publication date of the document.
+    #[cfg_attr(
+        feature = "serde",
+        serde(deserialize_with = "crate::serde_intern::deserialize")
+    )]
     pub date: time::Date,
 
     /// List of document authors.
+    #[cfg_attr(feature = "serde", serde(default))]
     pub authors: Vec<Author>,
 
     /// Institutions referenced by authors.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Vec::is_empty")
+    )]
     pub institutions: Vec<Institution>,
 
     /// Abstract or executive summary of the document.
     pub r#abstract: String,
 
+    /// License text
+    pub license: Option<String>,
+
     /// Main document body content.
+    #[cfg_attr(feature = "serde", serde(skip))]
     pub content: Vec<Content>,
 }
 
 /// Metadata describing a document author.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Author {
     /// Given name.
     pub first_name: Option<String>,
@@ -86,6 +106,7 @@ pub struct Author {
 /// This structure is intentionally flexible to support academic,
 /// governmental, and corporate institutions.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Institution {
     pub name: String,
     pub department: Option<String>,
@@ -100,6 +121,10 @@ pub struct Institution {
     pub code: Option<String>,
 }
 
+pub(crate) struct ContentTable {
+    headlines: HashMap<u16, (usize, String)>,
+}
+
 impl Document {
     /// Render the document as paginated plain text.
     ///
@@ -110,12 +135,37 @@ impl Document {
     ///
     /// A single `String` containing the fully rendered document,
     /// including page breaks and control characters.
-    pub fn render(&self, config: Config) -> String {
-        let mut render = Render::new(config.clone(), self);
+    pub fn render(mut self, config: Config) -> String {
+        self.title = self.title.to_uppercase();
+        self.subtitle = self.subtitle.map(|s| s.to_uppercase());
 
-        render.render_cover_page();
+        let mut content_table = ContentTable {
+            headlines: HashMap::new(),
+        };
+
+        let mut i = 0;
+        for c in &self.content {
+            match c {
+                Content::Headline { text, indent } => {
+                    content_table.headlines.insert(i, (*indent, text.into()));
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+
+        let content_table = Arc::new(Mutex::new(content_table));
+
+        let mut render = Render::new(config.clone(), &self);
+
+        render.render_cover_pages();
 
         render.new_page();
+
+        render.write_header();
+
+        render.push_centered("ABSTRACT");
+        render.push_blank_lines(3);
 
         let abstract_lines: Vec<String> = textwrap::wrap(&self.r#abstract, config.page_width)
             .into_iter()
@@ -126,7 +176,34 @@ impl Document {
             render.push_line(&line);
         }
 
-        render.push_line("");
+        render.push_blank_lines(3);
+
+        if let Some(license_text) = &self.license {
+            render.push_centered("LICENSE");
+            render.push_blank_lines(3);
+
+            let license_lines: Vec<String> = textwrap::wrap(license_text, config.page_width)
+                .into_iter()
+                .map(|s| s.into_owned())
+                .collect();
+
+            for line in license_lines {
+                render.push_centered(&line);
+            }
+        }
+
+        render.page_break();
+
+        render.push_blank_lines(3);
+
+        render.push_centered(&self.title);
+
+        if let Some(sub) = &self.subtitle {
+            render.push_blank_lines(1);
+            render.push_centered(sub);
+        }
+
+        render.push_blank_lines(5);
 
         render.write_contents(&self.content);
 
@@ -139,6 +216,7 @@ impl Document {
 /// `Content` is purely structural and contains no pagination
 /// or layout state.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Content {
     /// A free-flowing paragraph of text.
     Paragraph { text: String },
@@ -149,9 +227,6 @@ pub enum Content {
 
         /// Horizontal indentation in spaces.
         indent: usize,
-
-        /// Horizontal alignment of the headline text.
-        position: ContentPosition,
     },
 
     /// An unordered (bulleted) list.
@@ -179,6 +254,7 @@ pub enum Content {
 
 /// Horizontal alignment options for content.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ContentPosition {
     Left,
     Center,
@@ -187,6 +263,7 @@ pub enum ContentPosition {
 
 /// Enumeration of ordered list numbering styles.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum OrderedListType {
     /// (a, b, c, ...)
@@ -199,81 +276,4 @@ pub enum OrderedListType {
     LowercaseRomanNumerals = 4,
     /// (I, II, III, ...)
     UppercaseRomanNumerals = 5,
-}
-
-impl Content {
-    pub(crate) fn render_lines(&self, width: usize) -> Vec<String> {
-        match self {
-            Content::Paragraph { text } => {
-                let opts = textwrap::Options::new(width);
-                let mut lines: Vec<String> = textwrap::wrap(text, &opts)
-                    .into_iter()
-                    .map(|s| s.into_owned())
-                    .collect();
-                lines.push(String::new());
-                lines
-            }
-            Content::Headline {
-                text,
-                indent,
-                position,
-            } => {
-                let line = match position {
-                    ContentPosition::Left => format!("{:indent$}{}", "", text, indent = *indent),
-                    ContentPosition::Center => {
-                        let padding = (width.saturating_sub(text.len())) / 2;
-                        format!("{:padding$}{}", "", text, padding = padding)
-                    }
-                    ContentPosition::Right => {
-                        let padding = width.saturating_sub(text.len());
-                        format!("{:padding$}{}", "", text, padding = padding)
-                    }
-                };
-                vec![line, String::new()]
-            }
-            Content::UnsortedList { contents, compact } => {
-                let mut lines = Vec::new();
-                for c in contents {
-                    for l in c.render_lines(width) {
-                        lines.push(format!("* {}", l));
-                    }
-                    if !*compact {
-                        lines.push(String::new());
-                    }
-                }
-                lines
-            }
-            Content::OrderedList {
-                contents,
-                start,
-                r#type,
-                compact,
-            } => {
-                let mut lines = Vec::new();
-                for (i, c) in contents.iter().enumerate() {
-                    let index = match r#type {
-                        OrderedListType::LowerCaseLetters => {
-                            ((i + *start as usize) % 26 + b'a' as usize) as u8 as char
-                        }
-                        OrderedListType::UpperCaseLetters => {
-                            ((i + *start as usize) % 26 + b'A' as usize) as u8 as char
-                        }
-                        OrderedListType::DecimalNumbers => (i + *start as usize + 1)
-                            .to_string()
-                            .chars()
-                            .next()
-                            .unwrap_or('1'),
-                        _ => '?', // simplified for now
-                    };
-                    for l in c.render_lines(width) {
-                        lines.push(format!("{} {}", index, l));
-                    }
-                    if !*compact {
-                        lines.push(String::new());
-                    }
-                }
-                lines
-            }
-        }
-    }
 }

@@ -11,10 +11,13 @@ readme = "README.md"
 clap = { version = "4.5.56", features = ["derive", "unicode", "wrap_help", "env"], optional = true }
 pulldown-cmark = { version = "0.13.0", optional = true }
 serde = { version = "1.0.228", features = ["derive"], optional = true }
+serde_yaml = { version = "0.9.34", optional = true }
 itertools = "0.14.0"
 textwrap = "0.16.2"
-time = "0.3.46"
+time = { version = "0.3.46", features = ["parsing"] }
 unicode-width = "0.2.2"
+anyhow = "1.0.101"
+printpdf = { version = "0.9.0", optional = true }
 
 [[bin]]
 name = "monotext"
@@ -27,8 +30,10 @@ path = "src/lib.rs"
 
 [features]
 default = ["cli"]
-cli = ["dep:clap", "md"]
-md = ["dep:pulldown-cmark", "dep:serde"]
+cli = ["dep:clap", "md", "pdf"]
+serde = ["dep:serde", "time/serde"]
+md = ["serde", "dep:pulldown-cmark", "dep:serde_yaml"]
+pdf = ["dep:printpdf"]
 
 [profile.release]
 codegen-units = 1

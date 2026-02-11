@@ -1,0 +1,240 @@
+
+
+
+
+
+
+
+     RADIKAL KONSTRUKTIVISTISCHE ANALYSE ÖKONOMISCHER KOORDINATION
+
+                              1. AUFLAGE
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Julian Siebert
+
+
+                           10 February 2026
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                                         February 2026
+RADIKAL KONSTRUKTIVISTISCHE ANALYSE ÖKONOMISCHER KOORDINATION
+
+
+
+                               ABSTRACT
+
+
+
+Dieses Dokument formuliert eine deduktiv-logische, radikal
+konstruktivistische Beschreibung ökonomischer Größen wie Geld, Markt,
+Wert, Produktivität, Vermögen, Profit und Schulden. Es geht davon aus,
+dass diese Größen keine objektive, intrinsische Realität besitzen,
+sondern vollständig durch menschliche Interaktionen und kollektive
+Zuschreibung konstruiert werden. Das Papier lehnt den Realismus
+ökonomischer Größen ab und akzeptiert höchstens handelnde Menschen
+als viabel anzunehmende Basis (über Beobachtung zweiter Ordnung).
+Ziel ist ein konsistenter, präziser und viabler Beschreibungsrahmen
+für die Analyse wirtschaftlicher Prozesse unter konstruktivistischer
+Perspektive, insbesondere im Vergleich zwischen kapitalistischen und
+freiwirtschaftlichen
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Siebert                                                               
+                                                         February 2026
+RADIKAL KONSTRUKTIVISTISCHE ANALYSE ÖKONOMISCHER KOORDINATION
+
+
+
+Introduction
+
+Monotext is a structured plain-text document format designed for
+predictable pagination and archival readability.
+
+Formatting such as bold , italic , or links exists in Markdown but
+will not appear in rendered output.
+
+  Goals
+
+The main goals are:
+
+* Deterministic pagination
+
+* Semantic document structure
+
+* Long-term readability
+
+  Non-Goals
+
+* Rich styling
+
+* Embedded media
+
+* Hyperlink navigation
+
+Document Structure
+
+A document consists of metadata, an abstract, and structured content.
+
+  Paragraphs
+
+Paragraphs flow naturally and wrap to the configured page width.
+
+  Lists
+
+    Unordered Example
+
+* First item
+
+* Second item
+
+* Third item
+
+    Ordered Example
+
+1 Prepare document
+
+2 Render output
+
+3 Archive result
+
+
+
+
+Siebert                                                              1
+                                                         February 2026
+RADIKAL KONSTRUKTIVISTISCHE ANALYSE ÖKONOMISCHER KOORDINATION
+
+
+
+Rendering Rules
+
+Monotext rendering prioritizes clarity over presentation.
+
+Paragraph spacing is preserved, but inline styling is ignored.
+
+Conclusion
+
+Monotext provides a stable, predictable foundation for technical
+documents where structure matters more than appearance.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Siebert                                                              2

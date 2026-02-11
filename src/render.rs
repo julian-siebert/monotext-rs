@@ -2,7 +2,7 @@ use std::fmt::Write;
 
 use time::Month;
 
-use crate::{Config, Content, Document};
+use crate::{Config, Content, ContentPosition, Document, OrderedListType};
 
 pub struct Render<'a> {
     document: &'a Document,
@@ -24,14 +24,111 @@ impl<'a> Render<'a> {
 
     pub fn write_contents(&mut self, contents: &Vec<Content>) {
         for content in contents {
-            self.write_content(content);
+            self.write_content(content, 0);
         }
     }
 
-    pub fn write_content(&mut self, content: &Content) {
-        let lines = content.render_lines(self.config.page_width);
-        for line in lines {
-            self.push_line(&line);
+    pub fn write_content(&mut self, content: &Content, list_indent: usize) {
+        let width = self.config.page_width;
+
+        match content {
+            Content::Paragraph { text } => {
+                let total_indent = 2 + list_indent;
+                let opts = textwrap::Options::new(width.saturating_sub(total_indent));
+                for line in textwrap::wrap(text, &opts) {
+                    self.push_line(&format!(
+                        "{:indent$}{}",
+                        "",
+                        replace_invalid_asciis(&line),
+                        indent = total_indent
+                    ));
+                }
+                self.push_blank_lines(1);
+            }
+
+            Content::Headline { text, indent, .. } => {
+                let text = replace_invalid_asciis(text);
+                if *indent == 0 {
+                    if self.pager.page > 1 {
+                        self.page_break();
+                    }
+                    let padding = (width.saturating_sub(text.len())) / 2;
+                    self.push_line(&format!(
+                        "{:padding$}{}",
+                        "",
+                        text.to_uppercase(),
+                        padding = padding
+                    ));
+                } else {
+                    self.push_line(&text);
+                }
+                self.push_blank_lines(1);
+            }
+
+            Content::UnsortedList { contents, compact } => {
+                for item in contents {
+                    self.write_content(item, list_indent + 2);
+                }
+                if !*compact {
+                    self.push_blank_lines(1);
+                }
+            }
+
+            Content::OrderedList {
+                contents,
+                start,
+                r#type,
+                compact,
+            } => {
+                for (i, item) in contents.iter().enumerate() {
+                    let index = match r#type {
+                        OrderedListType::LowerCaseLetters => {
+                            let n = i + *start as usize;
+                            (((n % 26) as u8 + b'a') as char).to_string()
+                        }
+                        OrderedListType::UpperCaseLetters => {
+                            let n = i + *start as usize;
+                            (((n % 26) as u8 + b'A') as char).to_string()
+                        }
+                        OrderedListType::DecimalNumbers => (i + *start as usize).to_string(),
+                        _ => "?".into(),
+                    };
+
+                    let item_indent = list_indent + index.len() + 1;
+
+                    match item {
+                        Content::Paragraph { text } => {
+                            let opts = textwrap::Options::new(width.saturating_sub(item_indent));
+                            let mut first = true;
+                            for line in textwrap::wrap(text, &opts) {
+                                if first {
+                                    self.push_line(&format!(
+                                        "{:indent$}{}",
+                                        "",
+                                        replace_invalid_asciis(&format!("{} {}", index, line)),
+                                        indent = list_indent
+                                    ));
+                                    first = false;
+                                } else {
+                                    let hanging_indent = " ".repeat(item_indent);
+                                    self.push_line(&format!(
+                                        "{}{}",
+                                        hanging_indent,
+                                        replace_invalid_asciis(&line)
+                                    ));
+                                }
+                            }
+                            self.push_line("");
+                        }
+                        _ => {
+                            self.write_content(item, list_indent + 2);
+                        }
+                    }
+                }
+                if !*compact {
+                    self.push_line("");
+                }
+            }
         }
     }
 
@@ -40,7 +137,7 @@ impl<'a> Render<'a> {
             self.page_break();
         }
 
-        self.pager.out.push_str(line);
+        self.pager.out.push_str(&replace_invalid_asciis(line));
         self.pager.out.push('\n');
         self.pager.line_in_page += 1;
     }
@@ -62,8 +159,8 @@ impl<'a> Render<'a> {
         self.push_line(&line);
     }
 
-    pub fn render_cover_page(&mut self) {
-        self.push_blank_lines(5);
+    pub fn render_cover_pages(&mut self) {
+        self.push_blank_lines(self.config.page_height / 7);
 
         self.push_centered(&self.document.title);
 
@@ -72,7 +169,8 @@ impl<'a> Render<'a> {
             self.push_centered(sub);
         }
 
-        self.push_blank_lines(5);
+        let blank_lines = self.config.page_height / 8 * 4;
+        self.push_blank_lines(blank_lines);
 
         for author in &self.document.authors {
             let mut parts = Vec::new();
@@ -121,14 +219,20 @@ impl<'a> Render<'a> {
         self.pager.force_page_break();
     }
 
-    fn page_break(&mut self) {
+    pub fn page_break(&mut self) {
         self.pager.pad_to_page_end();
-        for footer_line in self.footer_lines() {
-            self.pager.out.push_str(&footer_line);
+
+        for _ in 0..3 {
             self.pager.out.push('\n');
         }
 
-        self.pager.out.push('\n');
+        for footer_line in self.footer_lines() {
+            self.pager
+                .out
+                .push_str(&replace_invalid_asciis(&footer_line));
+            self.pager.out.push('\n');
+        }
+
         self.pager.out.push('\x0C');
 
         self.pager.page += 1;
@@ -137,18 +241,21 @@ impl<'a> Render<'a> {
         self.write_header();
     }
 
-    fn write_header(&mut self) {
+    pub(crate) fn write_header(&mut self) {
         for header_line in self.header_lines() {
-            self.pager.out.push_str(&header_line);
+            self.pager
+                .out
+                .push_str(&replace_invalid_asciis(&header_line));
             self.pager.out.push('\n');
             self.pager.line_in_page += 1;
         }
+        self.push_blank_lines(2);
     }
 
     fn header_lines(&self) -> Vec<String> {
         let mut lines = Vec::new();
 
-        if self.pager.page < 2 {
+        if self.pager.page < 0 {
             return lines;
         }
 
@@ -177,13 +284,14 @@ impl<'a> Render<'a> {
     fn footer_lines(&self) -> Vec<String> {
         let mut lines = Vec::new();
 
-        let page_label = if self.pager.page <= self.config.roman_pages {
-            int_to_roman(self.pager.page as u32).to_lowercase()
-        } else {
-            self.pager.page.to_string()
-        };
+        let page = self.pager.page;
+        let page_label;
 
-        let right = format!("[Page {}]", page_label);
+        if page < 1 {
+            page_label = "".to_string();
+        } else {
+            page_label = page.to_string();
+        }
 
         let authors_left = self
             .document
@@ -194,7 +302,7 @@ impl<'a> Render<'a> {
             .join(", ");
 
         let left_len = authors_left.chars().count();
-        let right_len = right.chars().count();
+        let right_len = page_label.chars().count();
         let mut line = String::new();
 
         if left_len + right_len >= self.config.page_width {
@@ -202,10 +310,10 @@ impl<'a> Render<'a> {
                 &authors_left,
                 self.config.page_width.saturating_sub(right_len),
             );
-            write!(line, "{}{}", truncated, right).ok();
+            write!(line, "{}{}", truncated, page_label).ok();
         } else {
             let pad = self.config.page_width - left_len - right_len;
-            write!(line, "{}{:pad$}{}", authors_left, "", right, pad = pad).ok();
+            write!(line, "{}{:pad$}{}", authors_left, "", page_label, pad = pad).ok();
         }
 
         lines.push(line);
@@ -215,8 +323,14 @@ impl<'a> Render<'a> {
     pub fn finish(mut self) -> String {
         self.pager.pad_to_page_end();
 
+        for _ in 0..3 {
+            self.pager.out.push('\n');
+        }
+
         for footer_line in self.footer_lines() {
-            self.pager.out.push_str(&footer_line);
+            self.pager
+                .out
+                .push_str(&replace_invalid_asciis(&footer_line));
             self.pager.out.push('\n');
         }
 
@@ -225,7 +339,7 @@ impl<'a> Render<'a> {
 }
 
 pub struct Pager {
-    pub page: usize,
+    pub page: i32,
     pub line_in_page: usize,
     pub page_height: usize,
     pub out: String,
@@ -234,7 +348,7 @@ pub struct Pager {
 impl Pager {
     pub fn new(config: &Config) -> Self {
         Self {
-            page: 0,
+            page: -1,
             line_in_page: 0,
             page_height: config.page_height,
             out: String::new(),
@@ -322,4 +436,15 @@ fn int_to_roman(mut num: u32) -> String {
         }
     }
     result
+}
+
+fn replace_invalid_asciis(input: &str) -> String {
+    input
+        .replace("Ä", "AE")
+        .replace("ä", "ae")
+        .replace("Ö", "OE")
+        .replace("ö", "oe")
+        .replace("Ü", "UE")
+        .replace("ü", "ue")
+        .replace("ß", "ss")
 }
